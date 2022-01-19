@@ -1,0 +1,44 @@
+stages:
+   - build
+   - deploy
+
+build_app:
+   image: node:alpine
+   stage: build
+   only:
+      - develop
+   script:
+      - echo "proses build"
+      - npm install
+      - echo "Install sukses"
+      - npm run build
+      - echo "Build sukses"
+   tags:
+      - gcloud
+   cache:
+     paths:
+       - node_modules/ 
+   artifacts:
+      paths:
+         - dist/
+      expire_in: 1 hour
+
+deploy_staging:
+   stage: deploy
+   only:
+      - develop
+   before_script:
+      - echo "Install dan config VPN"
+      - which ssh-agent || (apt-get update -y -qq && apt-get install openssh-client -y -qq)
+      - cat <<< $OVPN > /etc/openvpn/client.ovpn
+      - sleep 30s
+      - echo "Deploy to staging"
+      - mkdir -p ~/.ssh
+      - echo -e "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+      - chmod 600 ~/.ssh/id_rsa
+      - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+   script:
+      - scp -r dist/* $TARGET
+      - ssh $HOST "pm2 restart all"
+   tags:
+      -gcloud
