@@ -1,0 +1,43 @@
+stages:
+   - build
+   - deploy
+
+build_app:
+   image: node:16-alpine
+   stage: build
+   only:
+      - develop
+   script:
+      - echo "proses build"
+      - npm install
+      - echo "Install sukses"
+      - npm run build
+      - echo "Build sukses"
+   cache:
+     paths:
+       - node_modules/ 
+   artifacts:
+      paths:
+         - dist/
+      expire_in: 1 hour
+
+deploy_staging:
+   image : ubuntu:18.04
+   stage: deploy
+   only:
+      - develop
+   before_script:
+      - echo "Install SSH dan config VPN"
+      - which ssh-agent || (apt-get update -y -qq && apt-get install openssh-client -y -qq)
+      - which openvpn || (apt-get update -y -qq && apt-get install -y -qq openvpn)
+      - cat <<< $OVPN > /etc/openvpn/client.ovpn
+      - echo "waiting for 30 second for VPN proses"
+      - echo "Create Key"
+      - mkdir -p ~/.ssh
+      - echo -e "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+      - chmod 600 ~/.ssh/id_rsa
+      - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+      - openvpn --config /etc/openvpn/client.ovpn --daemon
+      - sleep 30s
+   script:
+      - scp -r dist/* $TARGET
